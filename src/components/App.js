@@ -13,10 +13,10 @@ class App extends Component {
 
   componentDidMount() {
     const _onInit = auth2 => {
-      console.log("init OK", auth2);
+      console.log("Auth Init OK", auth2);
     };
     const _onError = err => {
-      console.log("error", err);
+      console.log("Auth Error", err);
     };
 
     window.gapi.load("auth2", () => {
@@ -31,23 +31,29 @@ class App extends Component {
   signIn = () => {
     const GoogleAuth = window.gapi.auth2.getAuthInstance();
 
-    GoogleAuth.signIn().then(googleUser => {
-      const profile = googleUser.getBasicProfile();
-      this.setState({
-        name: profile.getName(),
-        imgUrl: profile.getImageUrl()
-      });
-    });
+    GoogleAuth.signIn().then(
+      googleUser => {
+        const profile = googleUser.getBasicProfile();
+        this.setState({
+          name: profile.getName(),
+          imgUrl: profile.getImageUrl()
+        });
+      },
+      () => console.log("Sign In Error")
+    );
   };
 
   signOut = () => {
     const GoogleAuth = window.gapi.auth2.getAuthInstance();
-    GoogleAuth.signOut().then(() => {
-      this.setState({
-        name: null,
-        imgUrl: null
-      });
-    });
+    GoogleAuth.signOut().then(
+      () => {
+        this.setState({
+          name: null,
+          imgUrl: null
+        });
+      },
+      () => console.log("Sign Out Error")
+    );
   };
 
   render() {

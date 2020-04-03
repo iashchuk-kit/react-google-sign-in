@@ -14,6 +14,7 @@ const initialState = {
     id: null,
     name: "",
     surname: "",
+    fullname: "",
     email: "",
     imgUrl: null
 };
@@ -55,6 +56,7 @@ const App = () => {
                     id: userProfile.getId(),
                     name: userProfile.getGivenName(),
                     surname: userProfile.getFamilyName(),
+                    fullname: userProfile.getName(),
                     imgUrl: userProfile.getImageUrl(),
                     email: userProfile.getEmail(),
                     token
@@ -113,6 +115,8 @@ const App = () => {
             setProfile({
                 id: userProfile.getId(),
                 name: userProfile.getName(),
+                surname: userProfile.getFamilyName(),
+                fullname: userProfile.getName(),
                 imgUrl: userProfile.getImageUrl(),
                 email: userProfile.getEmail(),
                 token
@@ -141,14 +145,11 @@ const App = () => {
         GoogleAuth.signOut().then(onSuccess, onError);
     };
 
-    const encodeEmail = (from, to, subject, content) => {
+    const encodeEmail = (to, subject, content) => {
         const str = [
             'Content-Type: text/html; charset="UTF-8"\r\n',
             "to: ",
             to,
-            "\r\n",
-            "from: ",
-            from,
             "\r\n",
             "subject: ",
             subject,
@@ -162,16 +163,31 @@ const App = () => {
             .replace(/\//g, "_");
     };
 
+    const handleSuccessSent = response => {
+        console.log("Response", response);
+        setMessage("");
+        form.resetFields();
+        setSuccessSent(true);
+
+        setTimeout(() => {
+            setSuccessSent(false);
+        }, 2500);
+    };
+
+    const redirectToGmailDrafts = threadId => {
+        window.open(`https://mail.google.com/mail/u/0/#drafts/${threadId}`);
+    };
+
+    const redirectToGmailSent = threadId => {
+        window.open(`https://mail.google.com/mail/u/0/#sent/${threadId}`);
+    };
+
     const sendMail = ({ email, subject }) => {
         const onSuccess = response => {
-            console.log("Response", response);
-            setMessage("");
-            form.resetFields();
-            setSuccessSent(true);
-
-            setTimeout(() => {
-                setSuccessSent(false);
-            }, 2500);
+            handleSuccessSent(response);
+            if (isRedirect) {
+                redirectToGmailSent(response.result.threadId);
+            }
         };
 
         const onError = error => {
@@ -182,7 +198,7 @@ const App = () => {
             .send({
                 userId: profile.id,
                 resource: {
-                    raw: encodeEmail("Vitalii", email, subject, message)
+                    raw: encodeEmail(email, subject, message)
                 }
             })
             .then(onSuccess, onError);
@@ -190,36 +206,27 @@ const App = () => {
 
     const sendDraft = ({ email, subject }) => {
         const onSuccess = response => {
-            console.log("Response", response);
-            setMessage("");
-            form.resetFields();
-            setSuccessSent(true);
-
-            window.location.href = `https://mail.google.com/mail/u/0/#drafts?compose=CqMvqmRKHkTMNhxqkjlLqWqHcFVfzXPtsSlqpklCzDnxZBpPdwGFwQfpdcvQNfMzjCLgRgjlgsB`;
-
-            setTimeout(() => {
-                setSuccessSent(false);
-            }, 2500);
+            handleSuccessSent(response);
+            if (isRedirect) {
+                redirectToGmailDrafts(response.result.message.threadId);
+            }
         };
 
         const onError = error => {
             console.error("Execute error", error);
         };
-        
 
         window.gapi.client.gmail.users.drafts
             .create({
                 userId: profile.id,
                 message: {
-                    raw: encodeEmail("me", email, subject, message)
+                    raw: encodeEmail(email, subject, message)
                 }
             })
             .then(onSuccess, onError);
     };
 
     const onSubmit = isDraft ? sendDraft : sendMail;
-
-    console.log(profile);
 
     return (
         <div className={styles.app}>
@@ -287,9 +294,13 @@ const App = () => {
                                 onChange={value => setMessage(value)}
                             />
                             <div className={styles.warning}>
-                                {isDraft && !successSent && (
+                                {isDraft && !successSent ? (
                                     <span className={styles.info}>
                                         {`Draft will be saved in ${profile.email}`}
+                                    </span>
+                                ) : (
+                                    <span className={styles.info}>
+                                        {`Message will be sended from ${profile.email}`}
                                     </span>
                                 )}
                             </div>

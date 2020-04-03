@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useSetState } from "react-use";
 import ReactQuill from "react-quill";
-import { Form, Input, Button } from "antd";
+import { Form, Input, Checkbox, Button } from "antd";
 import { User } from "./User";
 import { Title } from "./Title";
 
@@ -14,6 +14,7 @@ const initialState = {
     id: null,
     name: "",
     surname: "",
+    email: "",
     imgUrl: null
 };
 
@@ -29,6 +30,9 @@ const App = () => {
     const [form] = Form.useForm();
     const [message, setMessage] = useState("");
     const [successSent, setSuccessSent] = useState(false);
+    const [isDraft, setDraft] = useState(true);
+    const [isRedirect, setRedirect] = useState(false);
+    const [isSelectAccount, setSelectAccount] = useState(true);
     const isAuthorized = Boolean(profile.id);
 
     const createGoogleApi = () => {
@@ -40,7 +44,7 @@ const App = () => {
 
     const authorize = useCallback(async () => {
         const onSuccess = auth2 => {
-            console.log("Auth Init OK");
+            console.log("Auth Init OK", auth2);
 
             if (auth2.isSignedIn.get()) {
                 loadGmailClient();
@@ -52,6 +56,7 @@ const App = () => {
                     name: userProfile.getGivenName(),
                     surname: userProfile.getFamilyName(),
                     imgUrl: userProfile.getImageUrl(),
+                    email: userProfile.getEmail(),
                     token
                 });
             }
@@ -74,6 +79,68 @@ const App = () => {
         apiScript.onload = authorize;
     }, [authorize]);
 
+    const loadGmailClient = () => {
+        if (window.gapi.client) {
+            const onSuccess = () => {
+                console.log("GAPI client loaded for API");
+            };
+
+            const onError = error => {
+                console.error("Execute error", error);
+            };
+
+            return window.gapi.client.load("gmail", "v1").then(onSuccess, onError);
+        }
+    };
+
+    const onSignIn = () => {
+        const GoogleAuth = window.gapi.auth2.getAuthInstance();
+        const options = new window.gapi.auth2.SigninOptionsBuilder();
+        options.setScope(gmailScope.join(" "));
+
+        if (isSelectAccount) {
+            options.setPrompt("select_account");
+        }
+
+        const onSuccess = googleUser => {
+            loadGmailClient();
+
+            const userProfile = googleUser.getBasicProfile();
+            const token = googleUser.getAuthResponse().id_token;
+
+            localStorage.setItem("token", token);
+
+            setProfile({
+                id: userProfile.getId(),
+                name: userProfile.getName(),
+                imgUrl: userProfile.getImageUrl(),
+                email: userProfile.getEmail(),
+                token
+            });
+            console.log("SignIn successful");
+        };
+
+        const onError = () => {
+            console.error("SignIn Error");
+        };
+
+        GoogleAuth.signIn(options).then(onSuccess, onError);
+    };
+
+    const onSignOut = () => {
+        const GoogleAuth = window.gapi.auth2.getAuthInstance();
+
+        const onSuccess = () => {
+            setProfile(initialState);
+        };
+
+        const onError = () => {
+            console.error("Sign Out Error");
+        };
+
+        GoogleAuth.signOut().then(onSuccess, onError);
+    };
+
     const encodeEmail = (from, to, subject, content) => {
         const str = [
             'Content-Type: text/html; charset="UTF-8"\r\n',
@@ -95,7 +162,7 @@ const App = () => {
             .replace(/\//g, "_");
     };
 
-    const sendMail = ({ email, message }) => {
+    const sendMail = ({ email, subject }) => {
         const onSuccess = response => {
             console.log("Response", response);
             setMessage("");
@@ -115,67 +182,44 @@ const App = () => {
             .send({
                 userId: profile.id,
                 resource: {
-                    raw: encodeEmail("Vitalii", email, "Hello form subject", message)
+                    raw: encodeEmail("Vitalii", email, subject, message)
                 }
             })
             .then(onSuccess, onError);
     };
 
-    const loadGmailClient = () => {
-        if (window.gapi.client) {
-            const onSuccess = () => {
-                console.log("GAPI client loaded for API");
-            };
+    const sendDraft = ({ email, subject }) => {
+        const onSuccess = response => {
+            console.log("Response", response);
+            setMessage("");
+            form.resetFields();
+            setSuccessSent(true);
 
-            const onError = error => {
-                console.error("Execute error", error);
-            };
+            window.location.href = `https://mail.google.com/mail/u/0/#drafts?compose=CqMvqmRKHkTMNhxqkjlLqWqHcFVfzXPtsSlqpklCzDnxZBpPdwGFwQfpdcvQNfMzjCLgRgjlgsB`;
 
-            return window.gapi.client.load("gmail", "v1").then(onSuccess, onError);
-        }
+            setTimeout(() => {
+                setSuccessSent(false);
+            }, 2500);
+        };
+
+        const onError = error => {
+            console.error("Execute error", error);
+        };
+        
+
+        window.gapi.client.gmail.users.drafts
+            .create({
+                userId: profile.id,
+                message: {
+                    raw: encodeEmail("me", email, subject, message)
+                }
+            })
+            .then(onSuccess, onError);
     };
 
-    const onSignIn = () => {
-        const GoogleAuth = window.gapi.auth2.getAuthInstance();
-        const scope = gmailScope.join(" ");
+    const onSubmit = isDraft ? sendDraft : sendMail;
 
-        const onSuccess = googleUser => {
-            loadGmailClient();
-
-            const userProfile = googleUser.getBasicProfile();
-            const token = googleUser.getAuthResponse().id_token;
-
-            localStorage.setItem("token", token);
-
-            setProfile({
-                id: userProfile.getId(),
-                name: userProfile.getName(),
-                imgUrl: userProfile.getImageUrl(),
-                token
-            });
-            console.log("SignIn successful");
-        };
-
-        const onError = () => {
-            console.error("SignIn Error");
-        };
-
-        GoogleAuth.signIn({ scope }).then(onSuccess, onError);
-    };
-
-    const onSignOut = () => {
-        const GoogleAuth = window.gapi.auth2.getAuthInstance();
-
-        const onSuccess = () => {
-            setProfile(initialState);
-        };
-
-        const onError = () => {
-            console.error("Sign Out Error");
-        };
-
-        GoogleAuth.signOut().then(onSuccess, onError);
-    };
+    console.log(profile);
 
     return (
         <div className={styles.app}>
@@ -193,14 +237,29 @@ const App = () => {
                                 Log out
                             </Button>
                         </div>
-                        <Form className={styles.form} form={form} onFinish={sendMail}>
+                        <Form className={styles.form} form={form} onFinish={onSubmit}>
                             <div className={styles.block}>
                                 <Button className={styles.submit} type="primary" htmlType="submit">
-                                    Send e-mail
+                                    {isDraft ? "Save draft" : "Send e-mail"}
                                 </Button>
                                 {successSent && (
                                     <span className={styles.success}>Message sent successed!</span>
                                 )}
+
+                                <Checkbox
+                                    className={styles.checkbox}
+                                    checked={isDraft}
+                                    onChange={evt => setDraft(evt.target.checked)}
+                                >
+                                    Draft
+                                </Checkbox>
+                                <Checkbox
+                                    className={styles.checkbox}
+                                    checked={isRedirect}
+                                    onChange={evt => setRedirect(evt.target.checked)}
+                                >
+                                    Redirect to Gmail
+                                </Checkbox>
                             </div>
 
                             <Form.Item
@@ -213,6 +272,13 @@ const App = () => {
                             >
                                 <Input className={styles.input} placeholder={"Send email to"} />
                             </Form.Item>
+                            <Form.Item
+                                className={styles.field}
+                                name="subject"
+                                rules={[{ required: true, message: "Please input subject" }]}
+                            >
+                                <Input className={styles.input} placeholder={"Subject"} />
+                            </Form.Item>
 
                             <ReactQuill
                                 className={styles.quill}
@@ -220,12 +286,28 @@ const App = () => {
                                 value={message}
                                 onChange={value => setMessage(value)}
                             />
+                            <div className={styles.warning}>
+                                {isDraft && !successSent && (
+                                    <span className={styles.info}>
+                                        {`Draft will be saved in ${profile.email}`}
+                                    </span>
+                                )}
+                            </div>
                         </Form>
                     </>
                 ) : (
-                    <Button className={styles.login} type="primary" onClick={onSignIn}>
-                        Log in
-                    </Button>
+                    <div className={styles.block}>
+                        <Button className={styles.login} type="primary" onClick={onSignIn}>
+                            Log in
+                        </Button>
+                        <Checkbox
+                            className={styles.checkbox}
+                            checked={isSelectAccount}
+                            onChange={evt => setSelectAccount(evt.target.checked)}
+                        >
+                            Select account
+                        </Checkbox>
+                    </div>
                 )}
             </header>
         </div>

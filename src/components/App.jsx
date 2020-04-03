@@ -95,7 +95,7 @@ const App = () => {
             .replace(/\//g, "_");
     };
 
-    const sendMail = ({ email, message }) => {
+    const sendMail = ({ email }) => {
         const onSuccess = response => {
             console.log("Response", response);
             setMessage("");

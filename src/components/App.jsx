@@ -1,16 +1,20 @@
-import React, { useEffect, useCallback } from "react";
+// @ts-check
+
+import React, { useState, useEffect, useCallback } from "react";
 import { useSetState } from "react-use";
+import ReactQuill from "react-quill";
+import { Form, Input, Button } from "antd";
 import { User } from "./User";
 import { Title } from "./Title";
-import { Button } from "./Button";
+
 import styles from "../styles/App.module.css";
+import "react-quill/dist/quill.snow.css";
 
 const initialState = {
     id: null,
     name: "",
     surname: "",
-    imgUrl: null,
-    value: ""
+    imgUrl: null
 };
 
 const gmailScope = [
@@ -21,8 +25,11 @@ const gmailScope = [
 ];
 
 const App = () => {
-    const [state, setState] = useSetState(initialState);
-    const isAuthorized = Boolean(state.id);
+    const [profile, setProfile] = useSetState(initialState);
+    const [form] = Form.useForm();
+    const [message, setMessage] = useState("");
+    const [successSent, setSuccessSent] = useState(false);
+    const isAuthorized = Boolean(profile.id);
 
     const createGoogleApi = () => {
         const script = document.createElement("script");
@@ -36,14 +43,15 @@ const App = () => {
             console.log("Auth Init OK");
 
             if (auth2.isSignedIn.get()) {
+                loadGmailClient();
                 const token = localStorage.getItem("token");
-                const profile = auth2.currentUser.get().getBasicProfile();
+                const userProfile = auth2.currentUser.get().getBasicProfile();
 
-                setState({
-                    id: profile.getId(),
-                    name: profile.getGivenName(),
-                    surname: profile.getFamilyName(),
-                    imgUrl: profile.getImageUrl(),
+                setProfile({
+                    id: userProfile.getId(),
+                    name: userProfile.getGivenName(),
+                    surname: userProfile.getFamilyName(),
+                    imgUrl: userProfile.getImageUrl(),
                     token
                 });
             }
@@ -59,18 +67,44 @@ const App = () => {
                 })
                 .then(onSuccess, onError);
         });
-    }, [setState]);
+    }, [setProfile]);
 
     useEffect(() => {
         const apiScript = createGoogleApi();
         apiScript.onload = authorize;
     }, [authorize]);
 
-    const sendMail = () => {
-        const base64EncodedEmail = "id93555@mail.ru";
+    const encodeEmail = (from, to, subject, content) => {
+        const str = [
+            'Content-Type: text/html; charset="UTF-8"\r\n',
+            "to: ",
+            to,
+            "\r\n",
+            "from: ",
+            from,
+            "\r\n",
+            "subject: ",
+            subject,
+            "\r\n\r\n",
+            message
+        ].join("");
 
+        return new Buffer(str)
+            .toString("base64")
+            .replace(/\+/g, "-")
+            .replace(/\//g, "_");
+    };
+
+    const sendMail = ({ email, message }) => {
         const onSuccess = response => {
             console.log("Response", response);
+            setMessage("");
+            form.resetFields();
+            setSuccessSent(true);
+
+            setTimeout(() => {
+                setSuccessSent(false);
+            }, 2500);
         };
 
         const onError = error => {
@@ -79,15 +113,10 @@ const App = () => {
 
         window.gapi.client.gmail.users.messages
             .send({
-                userId: state.id,
-                raw: btoa(
-                    "From:Vitalii\r\nTo:" +
-                        base64EncodedEmail +
-                        "\r\nSubject:" +
-                        "Hello form subject" +
-                        "\r\n\r\n" +
-                        "message"
-                )
+                userId: profile.id,
+                resource: {
+                    raw: encodeEmail("Vitalii", email, "Hello form subject", message)
+                }
             })
             .then(onSuccess, onError);
     };
@@ -113,15 +142,15 @@ const App = () => {
         const onSuccess = googleUser => {
             loadGmailClient();
 
-            const profile = googleUser.getBasicProfile();
+            const userProfile = googleUser.getBasicProfile();
             const token = googleUser.getAuthResponse().id_token;
 
             localStorage.setItem("token", token);
 
-            setState({
-                id: profile.getId(),
-                name: profile.getName(),
-                imgUrl: profile.getImageUrl(),
+            setProfile({
+                id: userProfile.getId(),
+                name: userProfile.getName(),
+                imgUrl: userProfile.getImageUrl(),
                 token
             });
             console.log("SignIn successful");
@@ -138,7 +167,7 @@ const App = () => {
         const GoogleAuth = window.gapi.auth2.getAuthInstance();
 
         const onSuccess = () => {
-            setState(initialState);
+            setProfile(initialState);
         };
 
         const onError = () => {
@@ -154,12 +183,49 @@ const App = () => {
                 <Title />
                 {isAuthorized ? (
                     <>
-                        <User name={state.name} imgUrl={state.imgUrl} />
-                        <Button onClick={onSignOut}>Log out</Button>
-                        <Button onClick={sendMail}>Send e-mail</Button>
+                        <User
+                            name={profile.name}
+                            surname={profile.surname}
+                            imgUrl={profile.imgUrl}
+                        />
+                        <div className={styles.buttons}>
+                            <Button className={styles.logout} type="primary" onClick={onSignOut}>
+                                Log out
+                            </Button>
+                        </div>
+                        <Form className={styles.form} form={form} onFinish={sendMail}>
+                            <div className={styles.block}>
+                                <Button className={styles.submit} type="primary" htmlType="submit">
+                                    Send e-mail
+                                </Button>
+                                {successSent && (
+                                    <span className={styles.success}>Message sent successed!</span>
+                                )}
+                            </div>
+
+                            <Form.Item
+                                className={styles.field}
+                                name="email"
+                                rules={[
+                                    { type: "email", message: "Email is not valid" },
+                                    { required: true, message: "Please input email" }
+                                ]}
+                            >
+                                <Input className={styles.input} placeholder={"Send email to"} />
+                            </Form.Item>
+
+                            <ReactQuill
+                                className={styles.quill}
+                                theme="snow"
+                                value={message}
+                                onChange={value => setMessage(value)}
+                            />
+                        </Form>
                     </>
                 ) : (
-                    <Button onClick={onSignIn}>Log in</Button>
+                    <Button className={styles.login} type="primary" onClick={onSignIn}>
+                        Log in
+                    </Button>
                 )}
             </header>
         </div>

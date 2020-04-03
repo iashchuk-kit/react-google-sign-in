@@ -12,7 +12,7 @@ Title.propTypes = {
 };
 
 Title.defaultProps = {
-    text: "Google Sign In"
+    text: "Google Sign In / Gmail"
 };
 
 export default Title;

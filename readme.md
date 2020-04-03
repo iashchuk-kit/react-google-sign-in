@@ -1,4 +1,4 @@
-# Авторизация с помощью Google. Интеграция с Gmail:
+## Авторизация с помощью Google. Интеграция с Gmail:
 
 Developers console: https://console.developers.google.com/apis/dashboard
 
